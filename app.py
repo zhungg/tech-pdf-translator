@@ -61,7 +61,7 @@ def translate_text(text, model_instance):
 if uploaded_file is not None and api_key:
     # Cấu hình AI
     genai.configure(api_key=api_key)
-    model = genai.GenerativeModel('gemini-1.5-flash')
+    model = genai.GenerativeModel('gemini-pro')
     
     if st.button("Translate PDF"):
         with st.spinner("Đang phân tích và dịch thuật (quá trình này sẽ hơi chậm để tránh lỗi quá tải API)..."):

@@ -58,7 +58,8 @@ def translate_text(text, client):
 if uploaded_file is not None and api_key:
     genai.configure(api_key=api_key)
     model = genai.GenerativeModel('gemini-1.5-flash')
-        if st.button("Translate PDF"):
+    
+    if st.button("Translate PDF"):
         with st.spinner("Processing PDF..."):
             try:
                 # Load the PDF

@@ -1,6 +1,6 @@
 import streamlit as st
 import fitz  # PyMuPDF
-from google import genai
+import google.generativeai as genai
 import re
 import io
 

@@ -49,17 +49,14 @@ def translate_text(text, client):
     {text}
     """
     try:
-        response = client.models.generate_content(
-            model='gemini-3.1-pro-preview',
-            contents=prompt,
-        )
+        response = model.generate_content(prompt)
         return response.text.strip()
     except Exception as e:
         st.error(f"Translation error: {e}")
         return text
 
 if uploaded_file is not None and api_key:
-    client = genai.Client(api_key=api_key)
+    genai.configure(api_key=api_key)
     
     if st.button("Translate PDF"):
         with st.spinner("Processing PDF..."):

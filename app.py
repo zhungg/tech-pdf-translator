@@ -4,6 +4,7 @@ import google.generativeai as genai
 import re
 import io
 import os
+import time
 
 # Configure Streamlit page
 st.set_page_config(page_title="In-place PDF Translator", page_icon="📄", layout="wide")
@@ -16,6 +17,7 @@ api_key = st.text_input("Gemini API Key", type="password")
 uploaded_file = st.file_uploader("Choose a PDF file", type="pdf")
 
 def is_math_or_technical(text):
+    """Lọc bỏ các công thức toán, số liệu và biến số kỹ thuật ngắn."""
     text = text.strip()
     if not text or len(text) < 2:
         return True
@@ -36,19 +38,24 @@ def is_math_or_technical(text):
     return False
 
 def translate_text(text, model_instance):
-    """Sử dụng model_instance đã được khởi tạo để dịch"""
+    """Gửi đoạn văn bản cho Gemini dịch."""
     prompt = f"""
-    Bạn là một chuyên gia dịch thuật kỹ thuật. Hãy dịch đoạn văn bản sau sang tiếng Việt học thuật.
+    Bạn là một chuyên gia dịch thuật tài liệu kỹ thuật chuyên ngành Điện tử Viễn thông. 
+    Hãy dịch đoạn văn bản sau sang tiếng Việt học thuật.
     Yêu cầu: 
     1. Giữ nguyên các ký hiệu công thức, biến số.
-    2. Chỉ trả về bản dịch, không thêm lời dẫn.
+    2. Chỉ trả về bản dịch, không thêm lời dẫn hay giải thích.
     
     Văn bản: {text}
     """
     try:
+        # Nghỉ 2 giây để tránh vượt quá giới hạn 15 request/phút của gói Free
+        time.sleep(2) 
         response = model_instance.generate_content(prompt)
         return response.text.strip()
     except Exception as e:
+        # Báo lỗi màu đỏ ra màn hình nếu API bị lỗi
+        st.error(f"Lỗi API khi dịch đoạn '{text[:20]}...': {e}")
         return text
 
 if uploaded_file is not None and api_key:
@@ -57,20 +64,21 @@ if uploaded_file is not None and api_key:
     model = genai.GenerativeModel('gemini-1.5-flash')
     
     if st.button("Translate PDF"):
-        with st.spinner("Đang phẫu thuật PDF và dịch thuật..."):
+        with st.spinner("Đang phân tích và dịch thuật (quá trình này sẽ hơi chậm để tránh lỗi quá tải API)..."):
             try:
+                # Load the PDF
                 pdf_bytes = uploaded_file.read()
                 doc = fitz.open(stream=pdf_bytes, filetype="pdf")
                 
-                # KIỂM TRA FONT: Ưu tiên NotoSans-Regular.ttf nếu Hùng đã upload lên GitHub
+                # Setup Font tiếng Việt
                 font_path = "NotoSans-Regular.ttf"
                 if os.path.exists(font_path):
                     user_font = font_path
                     font_name = "noto"
                 else:
-                    st.warning("Không tìm thấy file NotoSans-Regular.ttf. Chữ tiếng Việt có thể bị lỗi font.")
+                    st.warning("⚠️ Không tìm thấy file NotoSans-Regular.ttf trên GitHub. Chữ tiếng Việt có thể bị lỗi.")
                     user_font = None
-                    font_name = "helv" # Sẽ bị lỗi tiếng Việt nếu dùng font này
+                    font_name = "helv"
                 
                 progress_bar = st.progress(0)
                 total_pages = len(doc)
@@ -80,51 +88,50 @@ if uploaded_file is not None and api_key:
                     blocks = page.get_text("dict")["blocks"]
                     
                     for block in blocks:
-                        if block["type"] == 0: # Text block
+                        if block["type"] == 0: # Chỉ xử lý Text block
+                            # 1. Gộp toàn bộ chữ trong 1 khối để dịch 1 lần
+                            block_text = ""
                             for line in block["lines"]:
                                 for span in line["spans"]:
-                                    original_text = span["text"]
-                                    rect = fitz.Rect(span["bbox"])
-                                    color = span["color"]
-                                    font_size = span["size"]
+                                    block_text += span["text"] + " "
+                            
+                            original_text = block_text.strip()
+                            rect = fitz.Rect(block["bbox"]) # Lấy tọa độ của cả khối
+                            
+                            # 2. Lọc & Dịch
+                            if not is_math_or_technical(original_text):
+                                translated_text = translate_text(original_text, model)
+                                
+                                # 3. Xóa chữ cũ và ghi chữ mới
+                                if translated_text and translated_text != original_text:
+                                    # Xóa nền
+                                    page.add_redact_annot(rect, fill=(1, 1, 1))
+                                    page.apply_redactions()
                                     
-                                    if not is_math_or_technical(original_text):
-                                        # GỌI HÀM DỊCH: Truyền 'model' vào thay vì 'client'
-                                        translated_text = translate_text(original_text, model)
-                                        
-                                        if translated_text and translated_text != original_text:
-                                            # Xóa chữ cũ (Redaction)
-                                            page.add_redact_annot(rect, fill=(1, 1, 1))
-                                            page.apply_redactions()
-                                            
-                                            # Xử lý màu sắc RGB
-                                            r = ((color >> 16) & 255) / 255.0
-                                            g = ((color >> 8) & 255) / 255.0
-                                            b = (color & 255) / 255.0
-                                            
-                                            # Chèn chữ mới với font tiếng Việt
-                                            current_size = font_size
-                                            while current_size > 4:
-                                                rc = page.insert_textbox(
-                                                    rect, 
-                                                    translated_text, 
-                                                    fontsize=current_size, 
-                                                    fontname=font_name,
-                                                    fontfile=user_font, # Dùng file font đã tải
-                                                    color=(r, g, b),
-                                                    align=0
-                                                )
-                                                if rc >= 0: break
-                                                current_size -= 0.5
+                                    # Auto-scale chữ tiếng Việt cho vừa khung
+                                    current_size = 12 
+                                    while current_size > 4:
+                                        rc = page.insert_textbox(
+                                            rect, 
+                                            translated_text, 
+                                            fontsize=current_size, 
+                                            fontname=font_name,
+                                            fontfile=user_font,
+                                            color=(0, 0, 0), # Text màu đen
+                                            align=0
+                                        )
+                                        if rc >= 0: break # Vừa vặn thì thoát vòng lặp
+                                        current_size -= 0.5
                     
+                    # Cập nhật thanh tiến trình sau mỗi trang
                     progress_bar.progress((page_num + 1) / total_pages)
                 
-                # Xuất file
+                # Xuất file PDF mới
                 output_pdf = io.BytesIO()
                 doc.save(output_pdf)
                 doc.close()
                 
-                st.success("Đã dịch xong!")
+                st.success("🎉 Đã dịch xong hoàn tất!")
                 st.download_button(
                     label="Tải PDF đã dịch",
                     data=output_pdf.getvalue(),

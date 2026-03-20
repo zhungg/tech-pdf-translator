@@ -4,6 +4,7 @@ import re
 import io
 import os
 import time
+import requests
 import urllib.request
 from groq import Groq
 
@@ -19,26 +20,32 @@ uploaded_file = st.file_uploader("Choose a PDF file", type="pdf")
 
 @st.cache_resource
 def download_vietnamese_font():
-    """Tải font với User-Agent giả lập trình duyệt để chống chặn"""
-    font_path = "Roboto-Final.ttf"
+    """Tải font từ kho CDN siêu ổn định bằng thư viện requests"""
+    font_path = "Roboto-Ultra.ttf" # Đổi tên 1 lần nữa để xả rác bộ nhớ
     
-    # Xóa file cũ nếu nó là file rác/file lỗi (nhỏ hơn 50KB)
+    # Dọn dẹp file lỗi nếu có
     if os.path.exists(font_path) and os.path.getsize(font_path) < 50000:
         os.remove(font_path)
         
     if not os.path.exists(font_path):
         try:
-            import urllib.request
-            # Giả lập trình duyệt Chrome để không bị máy chủ từ chối
-            req = urllib.request.Request(
-                'https://github.com/google/fonts/raw/main/ofl/roboto/Roboto-Regular.ttf',
-                headers={'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'}
-            )
-            with urllib.request.urlopen(req) as response, open(font_path, 'wb') as out_file:
-                out_file.write(response.read())
+            # Link CDNJS tĩnh, cam kết sống dai, không bao giờ bị đổi cấu trúc
+            url = "https://cdnjs.cloudflare.com/ajax/libs/pdfmake/0.2.12/fonts/Roboto/Roboto-Regular.ttf"
+            
+            # Dùng requests để tải (vượt rào cực tốt)
+            response = requests.get(url, timeout=15)
+            response.raise_for_status() # Bắt ngay lỗi 404 nếu có
+            
+            with open(font_path, 'wb') as f:
+                f.write(response.content)
         except Exception as e:
-            st.error(f"Lỗi mạng khi tải font: {e}")
+            st.error(f"Lỗi tải font từ mạng: {e}")
             return None
+            
+    # Kiểm tra lần cuối
+    if os.path.exists(font_path) and os.path.getsize(font_path) > 50000:
+        return font_path
+    return None
             
     # Xác nhận file đã tải thành công và đủ dung lượng
     if os.path.exists(font_path) and os.path.getsize(font_path) > 50000:

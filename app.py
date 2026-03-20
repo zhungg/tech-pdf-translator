@@ -4,6 +4,8 @@ import re
 import io
 import time
 import requests
+import tempfile
+import os
 from groq import Groq
 
 # Configure Streamlit page
@@ -17,15 +19,20 @@ api_key = st.text_input("Groq API Key (bắt đầu bằng gsk_)", type="passwor
 uploaded_file = st.file_uploader("Choose a PDF file", type="pdf")
 
 @st.cache_resource
-def get_font_buffer():
-    """Tải font trực tiếp vào RAM, không lưu file ra ổ cứng để chặn đứng lỗi bảo mật"""
-    url = "https://cdnjs.cloudflare.com/ajax/libs/pdfmake/0.2.12/fonts/Roboto/Roboto-Regular.ttf"
+def get_temp_font_path():
+    """Sử dụng thư mục Tạm thời (Temp) của máy chủ để lưu font, vượt mọi rào cản phân quyền"""
+    url = "https://github.com/google/fonts/raw/main/apache/roboto/Roboto-Regular.ttf"
     try:
         response = requests.get(url, timeout=15)
         response.raise_for_status()
-        return response.content # Trả về trực tiếp dữ liệu thô (Bytes)
+        
+        # Tạo file tạm trong thư mục hệ thống bảo mật (Luôn có quyền đọc/ghi)
+        temp_file = tempfile.NamedTemporaryFile(delete=False, suffix=".ttf")
+        temp_file.write(response.content)
+        temp_file.close()
+        return temp_file.name
     except Exception as e:
-        st.error(f"Lỗi tải font từ mạng: {e}")
+        st.error(f"Không thể tải font: {e}")
         return None
 
 def is_math_or_table(text):
@@ -67,10 +74,12 @@ def translate_text(text, client):
 
 if uploaded_file is not None and api_key:
     client = Groq(api_key=api_key)
-    font_buffer = get_font_buffer()
+    
+    # Lấy đường dẫn file font an toàn từ hệ thống
+    safe_font_path = get_temp_font_path()
     
     if st.button("Translate PDF"):
-        with st.spinner("Đang biên dịch đoạn văn, nhúng font tiếng Việt trực tiếp vào bộ nhớ..."):
+        with st.spinner("Đang biên dịch đoạn văn, xử lý font chữ qua tempfile..."):
             try:
                 pdf_bytes = uploaded_file.read()
                 doc = fitz.open(stream=pdf_bytes, filetype="pdf")
@@ -80,16 +89,6 @@ if uploaded_file is not None and api_key:
                 
                 for page_num in range(total_pages):
                     page = doc[page_num]
-                    
-                    # TUYỆT CHIÊU CUỐI: Nhúng font bằng tham số fontbuffer thay vì fontfile
-                    current_font = "helv"
-                    if font_buffer:
-                        try:
-                            page.insert_font(fontname="roboto", fontbuffer=font_buffer)
-                            current_font = "roboto"
-                        except Exception:
-                            pass
-                    
                     blocks = page.get_text("dict")["blocks"]
                     
                     for block in blocks:
@@ -111,14 +110,27 @@ if uploaded_file is not None and api_key:
                                     
                                     current_size = 11 
                                     while current_size > 4:
-                                        rc = page.insert_textbox(
-                                            rect, 
-                                            translated_text, 
-                                            fontsize=current_size, 
-                                            fontname=current_font,
-                                            color=(0, 0, 0),
-                                            align=0
-                                        )
+                                        # TUYỆT CHIÊU: Truyền trực tiếp đường dẫn file an toàn vào hộp chữ
+                                        if safe_font_path:
+                                            rc = page.insert_textbox(
+                                                rect, 
+                                                translated_text, 
+                                                fontsize=current_size, 
+                                                fontname="roboto",
+                                                fontfile=safe_font_path,
+                                                color=(0, 0, 0),
+                                                align=0
+                                            )
+                                        else:
+                                            rc = page.insert_textbox(
+                                                rect, 
+                                                translated_text, 
+                                                fontsize=current_size, 
+                                                fontname="helv",
+                                                color=(0, 0, 0),
+                                                align=0
+                                            )
+                                            
                                         if rc >= 0: break 
                                         current_size -= 0.5
                     
@@ -128,13 +140,13 @@ if uploaded_file is not None and api_key:
                 doc.save(output_pdf)
                 doc.close()
                 
-                st.success("🎉 Dịch thành công! Đã xử lý triệt để lỗi hệ thống file.")
+                st.success("🎉 Dịch thành công! Không còn bất kỳ lỗi font nào.")
                 st.download_button(
                     label="Tải PDF đã dịch",
                     data=output_pdf.getvalue(),
-                    file_name="translated_document_fixed_font.pdf",
+                    file_name="translated_document_final.pdf",
                     mime="application/pdf"
                 )
-                
+                    
             except Exception as e:
                 st.error(f"Lỗi hệ thống: {e}")

@@ -21,7 +21,8 @@ uploaded_file = st.file_uploader("Choose a PDF file", type="pdf")
 @st.cache_resource
 def get_temp_font_path():
     """Sử dụng thư mục Tạm thời (Temp) của máy chủ để lưu font, vượt mọi rào cản phân quyền"""
-    url = "https://github.com/google/fonts/raw/main/apache/roboto/Roboto-Regular.ttf"
+    # Đã đổi lại thành link CDN tĩnh, vĩnh biệt lỗi 404
+    url = "https://cdnjs.cloudflare.com/ajax/libs/pdfmake/0.2.12/fonts/Roboto/Roboto-Regular.ttf"
     try:
         response = requests.get(url, timeout=15)
         response.raise_for_status()

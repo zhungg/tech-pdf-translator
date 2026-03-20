@@ -20,11 +20,13 @@ uploaded_file = st.file_uploader("Choose a PDF file", type="pdf")
 @st.cache_resource
 def download_vietnamese_font():
     """Tải font Roboto từ kho CDN siêu ổn định (Hỗ trợ tiếng Việt 100%)"""
-    font_path = "Roboto-Regular.ttf"
-    if not os.path.exists(font_path):
+    font_path = "Roboto-Fresh.ttf" # Đổi tên để ép hệ thống dọn rác cũ
+    
+    # Kiểm tra: Nếu file chưa có HOẶC file bị rỗng (< 10KB) thì mới tải
+    if not os.path.exists(font_path) or os.path.getsize(font_path) < 10000:
         try:
-            # Đường link mới từ CDNJS, cam kết không bị lỗi 404
-            url = "https://cdnjs.cloudflare.com/ajax/libs/pdfmake/0.1.66/fonts/Roboto/Roboto-Regular.ttf"
+            # Link xịn từ CDN quốc tế, cam kết không bao giờ 404
+            url = "https://cdnjs.cloudflare.com/ajax/libs/pdfmake/0.2.12/fonts/Roboto/Roboto-Regular.ttf"
             urllib.request.urlretrieve(url, font_path)
         except Exception as e:
             st.error(f"Lỗi tải font: {e}")

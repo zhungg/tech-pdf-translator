@@ -45,7 +45,7 @@ def translate_text(text, client):
         time.sleep(1) 
         chat_completion = client.chat.completions.create(
             messages=[{"role": "user", "content": prompt}],
-            model="llama3-8b-8192", # Sử dụng model Llama 3 siêu tốc và miễn phí
+            model="llama-3.1-8b-instant", 
         )
         return chat_completion.choices[0].message.content.strip()
     except Exception as e:

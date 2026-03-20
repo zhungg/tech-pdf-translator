@@ -15,7 +15,7 @@ st.title("High-Fidelity In-place PDF Translator (English to Vietnamese)")
 st.write("Upload a PDF to translate its text while preserving layout, images, and formulas.")
 
 # API Key input
-api_key = st.text_input("Groq API Key (bắt đầu bằng gsk_)", type="password")
+api_key = st.secrets.get("GROQ_API_KEY") or st.text_input("Groq API Key", type="password")
 uploaded_file = st.file_uploader("Choose a PDF file", type="pdf")
 
 @st.cache_resource
